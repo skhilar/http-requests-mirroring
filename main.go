@@ -1,12 +1,3 @@
-// Original Copyright 2012 Google, Inc. All rights reserved.
-//
-// Use of this source code is governed by a BSD-style license
-// that can be found in the LICENSE file in the root of the source
-// tree.
-
-// Modification Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
-// SPDX-License-Identifier: BSD-3-Clause
-
 package main
 
 import (
@@ -16,6 +7,12 @@ import (
 	"encoding/binary"
 	"flag"
 	"fmt"
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/examples/util"
+	"github.com/google/gopacket/layers"
+	"github.com/google/gopacket/pcap"
+	"github.com/google/gopacket/tcpassembly"
+	"github.com/google/gopacket/tcpassembly/tcpreader"
 	"hash/crc64"
 	"io"
 	"io/ioutil"
@@ -25,13 +22,6 @@ import (
 	"net/http"
 	"os"
 	"time"
-
-	"github.com/google/gopacket"
-	"github.com/google/gopacket/examples/util"
-	"github.com/google/gopacket/layers"
-	"github.com/google/gopacket/pcap"
-	"github.com/google/gopacket/tcpassembly"
-	"github.com/google/gopacket/tcpassembly/tcpreader"
 )
 
 var fwdDestination = flag.String("destination", "", "Destination of the forwarded requests.")
@@ -75,12 +65,15 @@ func (h *httpStream) run() {
 			log.Println("Error reading stream", h.net, h.transport, ":", err)
 		} else {
 			reqSourceIP := h.net.Src().String()
+			log.Println("Source Ip ", reqSourceIP)
 			reqDestionationPort := h.transport.Dst().String()
+			log.Println("Destination port ", reqDestionationPort)
 			body, bErr := ioutil.ReadAll(req.Body)
 			if bErr != nil {
 				return
 			}
 			req.Body.Close()
+			log.Println("Forwarding the request to destination")
 			go forwardRequest(req, reqSourceIP, reqDestionationPort, body)
 		}
 	}
@@ -126,6 +119,7 @@ func forwardRequest(req *http.Request, reqSourceIP string, reqDestionationPort s
 
 	// create a new url from the raw RequestURI sent by the client
 	url := fmt.Sprintf("%s%s", string(*fwdDestination), req.RequestURI)
+	log.Println("Forwarding the request to ", url)
 
 	// create a new HTTP request
 	forwardReq, err := http.NewRequest(req.Method, url, bytes.NewReader(body))
@@ -162,11 +156,12 @@ func forwardRequest(req *http.Request, reqSourceIP string, reqDestionationPort s
 	// Execute the new HTTP request
 	httpClient := &http.Client{}
 	resp, rErr := httpClient.Do(forwardReq)
+
 	if rErr != nil {
-		// log.Println("Forward request error", ":", err)
+		log.Println("Forward request error", ":", err)
 		return
 	}
-
+	log.Println(" Got response ", resp.Status)
 	defer resp.Body.Close()
 }
 
@@ -183,6 +178,7 @@ func openTCPClient() {
 	for {
 		// Listen for an incoming connection and close it immediately.
 		conn, _ := ln.Accept()
+		log.Println("Accepted the connection for healthcheck")
 		conn.Close()
 	}
 }
